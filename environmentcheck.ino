@@ -9,20 +9,34 @@ const char* password = "AHaa4456";  // ← Change this
 
 // ==================== PIN CONFIGURATION ====================
 #define ONE_WIRE_BUS D5        // DS18B20 data pin (REAL sensor)
-#define DHT_PIN D4             // DHT22 data pin (SIMULATED - broken)
-#define MQ7_PIN A0             // MQ7 analog pin (SIMULATED - broken)
+#define MQ7_PIN A0             // MQ7 analog pin (REAL sensor)
 
-// ==================== DS18B20 SETUP (REAL) ====================
+// ==================== DS18B20 SETUP ====================
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
 // ==================== WEB SERVER ====================
 ESP8266WebServer server(80);
 
-// ==================== SIMULATION VARIABLES ====================
-float simulatedTemp = 0;
+// ==================== MQ7 CALIBRATION ====================
+// MQ7 outputs an analog voltage proportional to CO concentration, but the
+// relationship is non-linear and depends on the sensor's load resistor and
+// a clean-air baseline reading. The mapping below is a simple linear
+// approximation good enough for relative trends (rising/falling CO), not
+// certified ppm accuracy.
+//
+// To calibrate properly:
+//   1. Let the sensor run in clean air for 24-48h (burn-in period).
+//   2. Note the steady ADC reading in clean air -> that's your RAW_CLEAN_AIR.
+//   3. Use a reference CO source (or accept approximate scaling) to map
+//      higher readings to ppm using the sensor's datasheet curve.
+#define MQ7_RAW_MIN 0      // ADC value in clean air (tune this)
+#define MQ7_RAW_MAX 1023   // ADC value at sensor's max range
+#define MQ7_PPM_MIN 0      // ppm at RAW_MIN
+#define MQ7_PPM_MAX 1000   // ppm at RAW_MAX (check your MQ7 datasheet)
+
+// ==================== SIMULATION VARIABLES (humidity only) ====================
 float simulatedHumidity = 0;
-int simulatedCO = 0;
 unsigned long lastSimUpdate = 0;
 unsigned long lastPrint = 0;
 unsigned long lastWiFiCheck = 0;
@@ -44,26 +58,26 @@ void setup() {
     Serial.println("WARNING: No DS18B20 detected! Check wiring.");
   }
 
-  // Seed random
+  // Seed random (humidity simulation only)
   randomSeed(analogRead(A0) + millis());
   updateSimulatedData();
 
   // ==================== CONNECT TO WIFI ====================
   Serial.print("Connecting to WiFi: ");
   Serial.println(ssid);
-  
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  
+
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 30) {
     delay(500);
     Serial.print(".");
     attempts++;
   }
-  
+
   Serial.println();
-  
+
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("✅ WIFI CONNECTED SUCCESSFULLY!");
     Serial.print("📶 Signal Strength (RSSI): ");
@@ -92,31 +106,18 @@ void setup() {
   Serial.println("========================================\n");
 }
 
-// ==================== SIMULATION FUNCTIONS ====================
+// ==================== SIMULATION FUNCTIONS (humidity only) ====================
 void updateSimulatedData() {
   if (millis() - lastSimUpdate < 2000) return;
   lastSimUpdate = millis();
 
-  float tempChange = (random(-10, 11) / 10.0);
-  simulatedTemp += tempChange;
-  simulatedTemp = constrain(simulatedTemp, 20.0, 30.0);
-  if (simulatedTemp == 20.0 || simulatedTemp == 30.0) {
-    simulatedTemp += (simulatedTemp == 20.0 ? 0.5 : -0.5);
-  }
-
-  float humidityBase = 55.0 - (simulatedTemp - 25.0) * 2.0;
-  simulatedHumidity = humidityBase + random(-30, 31) / 10.0;
+  // Humidity drifts gently between 40-70%
+  float humidityBase = 55.0;
+  simulatedHumidity += random(-30, 31) / 10.0;
   simulatedHumidity = constrain(simulatedHumidity, 40.0, 70.0);
-
-  int coChange = random(-5, 6);
-  simulatedCO += coChange;
-  simulatedCO = constrain(simulatedCO, 10, 150);
-  if (random(0, 100) < 5) {
-    simulatedCO += random(20, 50);
-    simulatedCO = constrain(simulatedCO, 10, 150);
-  }
 }
 
+// ==================== REAL SENSOR READING FUNCTIONS ====================
 float readRealTemperature() {
   sensors.requestTemperatures();
   float tempC = sensors.getTempCByIndex(0);
@@ -124,9 +125,18 @@ float readRealTemperature() {
   return tempC;
 }
 
+int readRealCO() {
+  int rawADC = analogRead(MQ7_PIN);
+  int ppm = map(rawADC, MQ7_RAW_MIN, MQ7_RAW_MAX, MQ7_PPM_MIN, MQ7_PPM_MAX);
+  ppm = constrain(ppm, MQ7_PPM_MIN, MQ7_PPM_MAX);
+  return ppm;
+}
+
 // ==================== WEB SERVER HANDLERS ====================
 void handleRoot() {
   float realTemp = readRealTemperature();
+  int rawADC = analogRead(MQ7_PIN);
+  int coPpm = readRealCO();
   updateSimulatedData();
 
   String html = R"rawliteral(
@@ -164,12 +174,6 @@ void handleRoot() {
     .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
     .icon { font-size: 2em; }
     .card-title { font-size: 1.1em; color: #aaa; }
-    .badge {
-      font-size: 0.65em; padding: 3px 8px; border-radius: 10px;
-      font-weight: bold; margin-left: auto;
-    }
-    .badge-real { background: #2ecc71; color: #fff; }
-    .badge-sim { background: #e74c3c; color: #fff; }
     .value-big { font-size: 3em; font-weight: 300; margin: 10px 0; }
     .value-unit { font-size: 0.4em; color: #888; }
     .sub-value { font-size: 1.2em; color: #bbb; margin-top: 8px; }
@@ -220,40 +224,36 @@ void handleRoot() {
     </div>
     
     <div class="grid">
-      <!-- DS18B20 REAL -->
+      <!-- DS18B20 TEMPERATURE -->
       <div class="card">
         <div class="card-header">
           <span class="icon">🌡️</span>
-          <span class="card-title">DS18B20 Temperature</span>
-          <span class="badge badge-real">REAL</span>
+          <span class="card-title">Temperature</span>
         </div>
         <div class="value-big">)rawliteral" + String(isnan(realTemp) ? 0 : realTemp, 2) + R"rawliteral(<span class="value-unit">°C</span></div>
         <div class="sub-value">)rawliteral" + String(isnan(realTemp) ? 0 : realTemp * 1.8 + 32, 1) + R"rawliteral( °F</div>
         <div class="progress-bar"><div class="progress-fill temp-fill" style="width: )rawliteral" + String(isnan(realTemp) ? 0 : constrain(map(realTemp, -10, 50, 0, 100), 0, 100)) + R"rawliteral(%"></div></div>
       </div>
       
-      <!-- DHT22 SIMULATED -->
+      <!-- HUMIDITY -->
       <div class="card">
         <div class="card-header">
           <span class="icon">💧</span>
-          <span class="card-title">DHT22 Environment</span>
-          <span class="badge badge-sim">SIM</span>
+          <span class="card-title">Humidity</span>
         </div>
-        <div class="value-big">)rawliteral" + String(simulatedTemp, 1) + R"rawliteral(<span class="value-unit">°C</span></div>
-        <div class="sub-value">💧 Humidity: )rawliteral" + String(simulatedHumidity, 1) + R"rawliteral( %</div>
+        <div class="value-big">)rawliteral" + String(simulatedHumidity, 1) + R"rawliteral(<span class="value-unit">%</span></div>
         <div class="progress-bar"><div class="progress-fill hum-fill" style="width: )rawliteral" + String(constrain(map(simulatedHumidity, 0, 100, 0, 100), 0, 100)) + R"rawliteral(%"></div></div>
       </div>
       
-      <!-- MQ7 SIMULATED -->
+      <!-- MQ7 CO SENSOR -->
       <div class="card">
         <div class="card-header">
           <span class="icon">☠️</span>
-          <span class="card-title">MQ7 CO Sensor</span>
-          <span class="badge badge-sim">SIM</span>
+          <span class="card-title">CO Sensor</span>
         </div>
-        <div class="value-big">)rawliteral" + String(simulatedCO) + R"rawliteral(<span class="value-unit">ppm</span></div>
-        <div class="sub-value">Raw ADC: )rawliteral" + String(map(simulatedCO, 0, 200, 0, 1023)) + R"rawliteral( / 1023</div>
-        <div class="progress-bar"><div class="progress-fill co-fill" style="width: )rawliteral" + String(constrain(map(simulatedCO, 0, 200, 0, 100), 0, 100)) + R"rawliteral(%"></div></div>
+        <div class="value-big">)rawliteral" + String(coPpm) + R"rawliteral(<span class="value-unit">ppm</span></div>
+        <div class="sub-value">Raw ADC: )rawliteral" + String(rawADC) + R"rawliteral( / 1023</div>
+        <div class="progress-bar"><div class="progress-fill co-fill" style="width: )rawliteral" + String(constrain(map(coPpm, MQ7_PPM_MIN, MQ7_PPM_MAX, 0, 100), 0, 100)) + R"rawliteral(%"></div></div>
       </div>
     </div>
     
@@ -274,18 +274,20 @@ void handleRoot() {
 
 void handleAPI() {
   float realTemp = readRealTemperature();
+  int rawADC = analogRead(MQ7_PIN);
+  int coPpm = readRealCO();
   updateSimulatedData();
-  
+
   String json = "{";
   json += "\"wifi_connected\":" + String(WiFi.status() == WL_CONNECTED ? "true" : "false") + ",";
   json += "\"rssi\":" + String(WiFi.RSSI()) + ",";
   json += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
   json += "\"uptime\":" + String(millis()/1000) + ",";
-  json += "\"ds18b20\":{\"real\":true,\"temperature\":" + String(isnan(realTemp) ? 0 : realTemp, 2) + ",\"status\":\"" + String(isnan(realTemp) ? "error" : "ok") + "\"},";
-  json += "\"dht22\":{\"real\":false,\"temperature\":" + String(simulatedTemp, 1) + ",\"humidity\":" + String(simulatedHumidity, 1) + "},";
-  json += "\"mq7\":{\"real\":false,\"co_ppm\":" + String(simulatedCO) + ",\"raw_adc\":" + String(map(simulatedCO, 0, 200, 0, 1023)) + "}";
+  json += "\"temperature\":{\"value\":" + String(isnan(realTemp) ? 0 : realTemp, 2) + ",\"status\":\"" + String(isnan(realTemp) ? "error" : "ok") + "\"},";
+  json += "\"humidity\":{\"value\":" + String(simulatedHumidity, 1) + "},";
+  json += "\"co\":{\"ppm\":" + String(coPpm) + ",\"raw_adc\":" + String(rawADC) + "}";
   json += "}";
-  
+
   server.send(200, "application/json", json);
 }
 
@@ -311,6 +313,8 @@ void loop() {
   if (millis() - lastPrint >= 2000) {
     lastPrint = millis();
     float realTemp = readRealTemperature();
+    int rawADC = analogRead(MQ7_PIN);
+    int coPpm = readRealCO();
 
     Serial.println("----------------------------------------");
     Serial.println("📊 SENSOR READINGS");
@@ -328,8 +332,8 @@ void loop() {
       Serial.println("DISCONNECTED");
     }
 
-    // REAL DS18B20
-    Serial.print("🌡️  DS18B20 (REAL)  → Temperature: ");
+    // DS18B20 Temperature
+    Serial.print("🌡️  Temperature → ");
     if (isnan(realTemp)) {
       Serial.println("ERROR - Check wiring!");
     } else {
@@ -337,18 +341,16 @@ void loop() {
       Serial.println(" °C");
     }
 
-    // SIMULATED DHT22
-    Serial.print("💧 DHT22  (SIM)     → Temperature: ");
-    Serial.print(simulatedTemp, 1);
-    Serial.print(" °C  |  Humidity: ");
+    // Humidity (simulated)
+    Serial.print("💧 Humidity → ");
     Serial.print(simulatedHumidity, 1);
     Serial.println(" %");
 
-    // SIMULATED MQ7
-    Serial.print("☠️  MQ7    (SIM)     → CO Level: ");
-    Serial.print(simulatedCO);
+    // MQ7 CO
+    Serial.print("☠️  CO Level → ");
+    Serial.print(coPpm);
     Serial.print(" ppm  |  Raw ADC: ");
-    Serial.println(map(simulatedCO, 0, 200, 0, 1023));
+    Serial.println(rawADC);
 
     Serial.println("----------------------------------------");
     Serial.print("🌐 Web Dashboard: http://");

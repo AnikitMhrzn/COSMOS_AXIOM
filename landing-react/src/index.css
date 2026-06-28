@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 225 14% 5%;
+    --foreground: 215 14% 88%;
+    --primary: 215 16% 70%;
+    --primary-foreground: 225 14% 8%;
+    --secondary: 220 10% 15%;
+    --secondary-foreground: 215 14% 88%;
+    --muted: 220 9% 18%;
+    --muted-foreground: 218 9% 58%;
+    --accent: 215 12% 40%;
+    --accent-foreground: 215 14% 92%;
+    --border: 220 9% 17%;
+    --input: 220 9% 17%;
+    --ring: 215 12% 45%;
+    --radius: 0.75rem;
+  }
+  * { @apply border-border; }
+  html { scroll-behavior: smooth; }
+  html, body, #root { min-height: 100%; }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+}
+
+/* ============== Horizon / Cosmos hero ============== */
+.hero-container {
+  position: relative;
+  width: 100%;
+  background: #05060a;
+  color: #e9eef6;
+}
+.hero-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 0;
+  display: block;
+}
+/* dark vignette so text stays readable over the stars */
+.hero-container::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% 30%, rgba(5,6,10,0) 42%, rgba(5,6,10,.7) 100%),
+    linear-gradient(180deg, rgba(5,6,10,.5) 0%, rgba(5,6,10,0) 28%, rgba(5,6,10,.85) 100%);
+}
+
+/* persistent CTA, fixed top-right on every section */
+.nav-cta {
+  position: fixed;
+  top: 24px;
+  right: 30px;
+  z-index: 6;
+}
+@media (max-width: 640px) {
+  .nav-cta { top: 16px; right: 16px; }
+}
+
+.side-menu {
+  position: fixed;
+  left: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.menu-icon { display: flex; flex-direction: column; gap: 5px; cursor: pointer; }
+.menu-icon span { width: 24px; height: 2px; background: #8b97ad; display: block; }
+.vertical-text {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  color: #8b97ad;
+  text-transform: uppercase;
+}
+
+.hero-content {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  width: 100%;
+  text-align: center;
+  padding: 0 24px;
+  pointer-events: none;
+}
+.hero-content .cta { pointer-events: auto; }
+.hero-title {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 0.95;
+  font-size: clamp(56px, 13vw, 170px);
+  margin: 0;
+  background: linear-gradient(180deg, #e6e8ec 0%, #9ba1ab 58%, #565b66 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 50px rgba(160,168,182,0.12);
+}
+.title-char { display: inline-block; will-change: transform, opacity; }
+.hero-subtitle {
+  margin-top: 22px;
+  color: #8b97ad;
+  font-size: clamp(14px, 1.9vw, 19px);
+  line-height: 1.7;
+}
+.subtitle-line { margin: 2px 0; }
+.cta { margin-top: 40px; }
+
+.scroll-progress {
+  position: fixed;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.scroll-text, .section-counter {
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: #8b97ad;
+  text-transform: uppercase;
+}
+.progress-track {
+  width: 160px;
+  height: 3px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6b7280, #aeb4be);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+/* ============== Integration marquee ============== */
+@keyframes scroll-left {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes scroll-right {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+.animate-scroll-left { animation: scroll-left 30s linear infinite; }
+.animate-scroll-right { animation: scroll-right 30s linear infinite; }
+
+/* scroll height that drives the 3D camera */
+.scroll-sections { position: relative; z-index: 2; }
+.content-section {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 0 24px;
+}

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Protego — Safety Compliance</title>
+<style>
+  :root{ --text:#e9edf5; --muted:#8b94a7; --accent:#5b8cff; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#05070d;color:var(--text);overflow:hidden;
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  #bg{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0}
+  /* soft vertical darkening so text stays readable, keeps it dim */
+  .vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 35%, rgba(5,7,13,0) 40%, rgba(5,7,13,.85) 100%)}
+  .wrap{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;padding:24px}
+  .brandmark{font-size:13px;letter-spacing:.5em;color:var(--muted);text-transform:uppercase;
+    margin-bottom:26px;opacity:0;animation:fade 1s ease .2s forwards}
+  h1{margin:0;font-weight:800;line-height:.95;letter-spacing:.06em;
+    font-size:clamp(56px,16vw,180px);
+    background:linear-gradient(180deg,#ffffff 0%,#c4cad6 45%,#717a8c 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 2px 40px rgba(120,150,255,.08);
+    opacity:0;transform:translateY(40px);animation:rise 1.4s cubic-bezier(.2,.7,.2,1) .35s forwards}
+  .tagline{margin:22px 0 0;color:var(--muted);font-size:clamp(14px,2.1vw,19px);
+    letter-spacing:.04em;max-width:680px;opacity:0;animation:fade 1.2s ease .9s forwards}
+  .tagline b{color:#aeb7c9;font-weight:600}
+  .cta{margin-top:42px;display:flex;gap:16px;flex-wrap:wrap;justify-content:center;
+    opacity:0;animation:fade 1.2s ease 1.2s forwards}
+  .btn{appearance:none;cursor:pointer;text-decoration:none;font-size:15px;font-weight:600;
+    padding:14px 34px;border-radius:999px;transition:transform .15s ease,box-shadow .25s ease,background .25s}
+  .btn-primary{color:#eaf0ff;border:1px solid rgba(120,150,255,.5);
+    background:linear-gradient(180deg,rgba(91,140,255,.22),rgba(91,140,255,.08));
+    box-shadow:0 0 0 rgba(91,140,255,0)}
+  .btn-primary:hover{transform:translateY(-2px);
+    box-shadow:0 8px 30px rgba(91,140,255,.28);background:linear-gradient(180deg,rgba(91,140,255,.34),rgba(91,140,255,.14))}
+  .btn-ghost{color:var(--muted);border:1px solid rgba(255,255,255,.12);background:transparent}
+  .btn-ghost:hover{color:var(--text);border-color:rgba(255,255,255,.25)}
+  .units{position:fixed;bottom:26px;left:0;right:0;z-index:2;display:flex;gap:26px;
+    justify-content:center;color:var(--muted);font-size:12px;letter-spacing:.12em;
+    text-transform:uppercase;opacity:0;animation:fade 1.2s ease 1.5s forwards}
+  .units span{display:flex;align-items:center;gap:8px}
+  .units i{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);font-style:normal}
+  @keyframes rise{to{opacity:1;transform:translateY(0)}}
+  @keyframes fade{to{opacity:1}}
+</style>
+</head>
+<body>
+  <canvas id="bg"></canvas>
+  <div class="vignette"></div>
+
+  <div class="wrap">
+    <div class="brandmark">Protego Safety System</div>
+    <h1>PROTEGO</h1>
+    <p class="tagline">Real-time <b>PPE &amp; identity compliance</b> and <b>environmental hazard</b> monitoring — keeping every worker visible, identified, and safe.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="/console">Start Now →</a>
+      <a class="btn btn-ghost" href="#" id="learn">Learn more</a>
+    </div>
+  </div>
+
+  <div class="units">
+    <span><i></i>Computer Vision</span>
+    <span><i></i>Environment Unit</span>
+    <span><i></i>Live Dashboard</span>
+  </div>
+
+  <script src="/vendor/three.min.js"></script>
+  <script>
+  (function(){
+    if(!window.THREE){ document.getElementById('bg').style.display='none'; return; }
+    const canvas = document.getElementById('bg');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x05070d, 0.00045);
+
+    const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 3000);
+    camera.position.set(0, 18, 120);
+
+    const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.42;  // dim, not bright
+
+    // ---- starfield (3 slowly-rotating layers) ----
+    const starLayers = [];
+    for(let l=0; l<3; l++){
+      const n = 1600, g = new THREE.BufferGeometry();
+      const pos = new Float32Array(n*3), col = new Float32Array(n*3), siz = new Float32Array(n);
+      for(let i=0;i<n;i++){
+        const r = 250 + Math.random()*900;
+        const th = Math.random()*Math.PI*2, ph = Math.acos(Math.random()*2-1);
+        pos[i*3]   = r*Math.sin(ph)*Math.cos(th);
+        pos[i*3+1] = r*Math.sin(ph)*Math.sin(th);
+        pos[i*3+2] = r*Math.cos(ph);
+        const c = new THREE.Color(), pick = Math.random();
+        if(pick<0.75) c.setHSL(0,0,0.6+Math.random()*0.35);
+        else if(pick<0.92) c.setHSL(0.6,0.4,0.7);
+        else c.setHSL(0.08,0.5,0.7);
+        col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b;
+        siz[i]=Math.random()*1.6+0.4;
+      }
+      g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+      g.setAttribute('color', new THREE.BufferAttribute(col,3));
+      g.setAttribute('size', new THREE.BufferAttribute(siz,1));
+      const m = new THREE.ShaderMaterial({
+        uniforms:{ t:{value:0}, d:{value:l} },
+        vertexShader:`attribute float size;attribute vec3 color;varying vec3 vC;uniform float t;uniform float d;
+          void main(){vC=color;vec3 p=position;float a=t*0.03*(1.0-d*0.25);
+          mat2 r=mat2(cos(a),-sin(a),sin(a),cos(a));p.xy=r*p.xy;
+          vec4 mv=modelViewMatrix*vec4(p,1.0);gl_PointSize=size*(300.0/-mv.z);gl_Position=projectionMatrix*mv;}`,
+        fragmentShader:`varying vec3 vC;void main(){float dd=length(gl_PointCoord-vec2(0.5));
+          if(dd>0.5)discard;float o=1.0-smoothstep(0.0,0.5,dd);gl_FragColor=vec4(vC,o*0.9);}`,
+        transparent:true, blending:THREE.AdditiveBlending, depthWrite:false
+      });
+      const pts = new THREE.Points(g,m); scene.add(pts); starLayers.push(pts);
+    }
+
+    // ---- subtle nebula ----
+    const nebG = new THREE.PlaneGeometry(7000,3500,60,60);
+    const nebM = new THREE.ShaderMaterial({
+      uniforms:{ t:{value:0}, c1:{value:new THREE.Color(0x12204a)}, c2:{value:new THREE.Color(0x2a1140)}, o:{value:0.22} },
+      vertexShader:`varying vec2 vUv;varying float vE;uniform float t;
+        void main(){vUv=uv;vec3 p=position;float e=sin(p.x*0.01+t)*cos(p.y*0.01+t)*18.0;p.z+=e;vE=e;
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);}`,
+      fragmentShader:`uniform vec3 c1;uniform vec3 c2;uniform float o;uniform float t;varying vec2 vUv;varying float vE;
+        void main(){float mF=sin(vUv.x*9.0+t)*cos(vUv.y*9.0+t);vec3 c=mix(c1,c2,mF*0.5+0.5);
+        float a=o*(1.0-length(vUv-0.5)*2.0);a*=1.0+vE*0.01;gl_FragColor=vec4(c,max(a,0.0));}`,
+      transparent:true, blending:THREE.AdditiveBlending, side:THREE.DoubleSide, depthWrite:false
+    });
+    const nebula = new THREE.Mesh(nebG,nebM); nebula.position.z=-900; scene.add(nebula);
+
+    // ---- parallax mountains (dark silhouettes) ----
+    const mountains = [];
+    const layers = [
+      {z:-60,h:70,c:0x0c1020,o:1},
+      {z:-120,h:95,c:0x101938,o:0.85},
+      {z:-180,h:120,c:0x0f2547,o:0.6},
+      {z:-240,h:150,c:0x0b2f55,o:0.4},
+    ];
+    layers.forEach((L,idx)=>{
+      const pts=[]; const seg=60;
+      for(let i=0;i<=seg;i++){
+        const x=(i/seg-0.5)*1400;
+        const y=Math.sin(i*0.1+idx)*L.h + Math.sin(i*0.05)*L.h*0.5 + Math.random()*L.h*0.2 - 130;
+        pts.push(new THREE.Vector2(x,y));
+      }
+      pts.push(new THREE.Vector2(6000,-400)); pts.push(new THREE.Vector2(-6000,-400));
+      const geo=new THREE.ShapeGeometry(new THREE.Shape(pts));
+      const mat=new THREE.MeshBasicMaterial({color:L.c,transparent:true,opacity:L.o,side:THREE.DoubleSide});
+      const m=new THREE.Mesh(geo,mat); m.position.z=L.z; m.position.y=L.z; scene.add(m); mountains.push(m);
+    });
+
+    // mouse parallax target
+    let mx=0,my=0;
+    addEventListener('mousemove',e=>{ mx=(e.clientX/innerWidth-0.5); my=(e.clientY/innerHeight-0.5); });
+
+    const sm={x:0,y:18,z:120};
+    function animate(){
+      requestAnimationFrame(animate);
+      const t=Date.now()*0.001;
+      starLayers.forEach(s=>{ if(s.material.uniforms) s.material.uniforms.t.value=t; });
+      nebM.uniforms.t.value=t*0.5;
+      const tx=mx*30, ty=18-my*16;
+      sm.x+=(tx-sm.x)*0.04; sm.y+=(ty-sm.y)*0.04;
+      camera.position.x=sm.x+Math.sin(t*0.1)*2;
+      camera.position.y=sm.y+Math.cos(t*0.15)*1;
+      camera.lookAt(0,8,-600);
+      mountains.forEach((m,i)=>{ const p=1+i*0.5; m.position.x=Math.sin(t*0.1)*2*p; m.position.y=m.position.y; });
+      renderer.render(scene,camera);
+    }
+    animate();
+    addEventListener('resize',()=>{
+      camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth,innerHeight);
+    });
+    document.getElementById('learn').addEventListener('click',e=>{e.preventDefault();
+      alert('Protego: computer-vision PPE compliance + ESP environment monitoring, unified in one live dashboard.');});
+  })();
+  </script>
+</body>
+</html>
